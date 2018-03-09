@@ -5,7 +5,7 @@ A command line interface to use Discord.
 This is for the 99.7% who refuse to read Discord ToS (and possibly this disclaimer as well).
 
 This project wasn't meant to replace discord's official client in any way shape or form.    
-If, your account gets banned, don't come creating 700 Github Issues with you 2000 alts because I warned you here.
+If your account gets banned, don't come creating 700 Github Issues with you 2000 alts. I already warned you here.
 
 Using this program with a user account is much more dangerous than a bot account. I'm using `discord.py 1.0.0a` right here. It has `user-agent`s in it's requests to the Discord API to say that it isn't a client which means it isn't hard for Discord to realise that you aren't using the client.
 
@@ -17,7 +17,7 @@ If you have finished reading this, and still want to have some super cool comman
 
 TL;DR Don't blame me if you get banned.
 
-## Is this project meant for development?
+## Is this project meant for production?
 No.    
 This project is **far from complete**. Refer to some of the below sections for further explanation.
 
