@@ -48,9 +48,9 @@ python3.6 main.py MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4 38
 
 ## What else do I want to be here?
 - [ ] Commands! 
-  - [-] /lenny
-  - [-] /shrug
-  - [-] /channel <CHANNEL ID>
+  - [x] /lenny
+  - [x] /shrug
+  - [x] /channel <CHANNEL ID>
   - [ ] /embed
 
 - [ ] Remove f-strings
