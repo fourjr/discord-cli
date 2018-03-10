@@ -40,6 +40,9 @@ An example
 python3.6 main.py MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4 381870553235193857
 ```
 
+![https://i.imgur.com/QvY5GIM.png](An example of a functioning CLI)
+![https://i.imgur.com/z0kPupy.png](The CLI Error handling)
+
 ## What else do I want to be here?
 - [ ] Commands! 
   - [ ] /lenny
