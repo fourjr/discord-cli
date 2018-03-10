@@ -22,22 +22,22 @@ No.
 This project is **far from complete**. Refer to some of the below sections for further explanation.
 
 ## How do you use this?
-I assume you already have Python >3.6 installed (f-strings -- will probably get removed when I complete the project).  
+I assume you already have at least Python 3.5 installed.    
 I also assume you have `git clone`d this.
 
 Install requirements from `requirements.txt`
 ```
-python3.6 -m pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 Run the file
 ```
-python3.6 main.py <YOUR BOT/USER ACCOUNT TOKEN> <CHANNEL ID>
+python main.py <YOUR BOT/USER ACCOUNT TOKEN> <CHANNEL ID>
 ```
 
 An example
 ```
-python3.6 main.py MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4 381870553235193857
+python main.py MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4 381870553235193857
 ```
 
 ![image](https://i.imgur.com/QvY5GIM.png)    
@@ -53,7 +53,7 @@ python3.6 main.py MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4 38
   - [x] /channel <CHANNEL ID>
   - [ ] /embed
 
-- [ ] Remove f-strings
+- [x] Remove f-strings - py3.5 compaitibility
 
 ## How can you help?
 [CONTRIBUTING.md](CONTRIBUTING.md)
