@@ -40,10 +40,10 @@ An example
 python3.6 main.py MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4 381870553235193857
 ```
 
-![image](https://i.imgur.com/QvY5GIM.png)
+![image](https://i.imgur.com/QvY5GIM.png)    
 *An example of a functioning CLI*
 
-![image](https://i.imgur.com/z0kPupy.png)
+![image](https://i.imgur.com/z0kPupy.png)    
 *The CLI Error Handling*
 
 ## What else do I want to be here?
