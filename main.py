@@ -23,7 +23,7 @@ async def on_ready():
 
 @bot.event
 async def on_connect():
-    cprint(f'Midway through logging in.', 'green')
+    cprint('Midway through logging in.', 'green')
 
 @bot.event
 async def on_message(m):
@@ -33,7 +33,7 @@ async def on_message(m):
         else:
             color = 'yellow'
 
-        cprint(f'{m.author}: {m.content}', color)
+        cprint('{0.author}: {0.content}'.format(m), color)
 
 async def user_input():
     await bot.wait_until_ready()
