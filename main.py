@@ -35,6 +35,7 @@ class Bot(commands.Bot):
         super().__init__(command_prefix='/')
         self.loop.create_task(self.user_input())
         self.channel = None
+        self.is_bot = None
         self.role_converter = commands.RoleConverter()
         self.member_converter = commands.MemberConverter()
         self.remove_command('help')
@@ -47,6 +48,7 @@ class Bot(commands.Bot):
 
     async def on_connect(self):
         '''Sets the client presence'''
+        self.is_bot = self._connection.is_bot
         await self.change_presence(status=discord.Status.offline, afk=True)
 
     async def on_ready(self):
