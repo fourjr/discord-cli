@@ -22,7 +22,7 @@ args = parser.parse_args()
 colorama.init()
 
 ## CHECKS TO ENSURE YOU DON'T TRY TO LOAD UP WITH DOWNGRADED SHIT ##
-if float('.'.join(platform.python_version().split('.')[:2])) < 3.9:
+if float('.'.join(platform.python_version().split('.')[:2])) < 3.5:
     cprint('\n'.join(('You are using an unsupported version of Python.',
                       'Please upgrade to at least Python 3.5 to use discord-cli',
                       'You are currently on ' + platform.python_version())), 'red')
