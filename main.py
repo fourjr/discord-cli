@@ -1,17 +1,13 @@
-import asyncio
-import sys
 import os
 import platform
 import re
 from argparse import ArgumentParser
-from collections import namedtuple
 
 import colorama
 import discord
-from aioconsole.stream import ainput
-from box import Box
 from discord.ext import commands
-from termcolor import cprint, colored
+from aioconsole.stream import ainput
+from termcolor import cprint
 
 from ext.context import Context
 
@@ -34,12 +30,14 @@ if float('.'.join(platform.python_version().split('.')[:2])) < 3.5:
 ### PROGRAM ###
 
 class Bot(commands.Bot):
+    '''Bot subclass to handle CLI IO'''
     def __init__(self):
         super().__init__(command_prefix='/')
         self.loop.create_task(self.user_input())
         self.channel = None
         self.role_converter = commands.RoleConverter()
         self.member_converter = commands.MemberConverter()
+        self.remove_command('help')
 
         for i in [i.replace('.py', '') for i in os.listdir('commands') if i.endswith('.py')]:
             self.load_extension('commands.' + i)
@@ -62,33 +60,48 @@ class Bot(commands.Bot):
             cprint('\n'.join(('Logged in as {0.user} in no specified channel.'.format(self),
                               'Send a channel ID to start the program')), 'green')
         else:
-            cprint('Logged in as {0.user} in #{0.channel.name}'.format(self), 'green')
+            cprint('Logged in as {0.user} in #{0.channel}'.format(self), 'green')
 
-    async def on_message(self, m):
+    async def on_message(self, message):
+        '''Prints to console upon new message'''
         await self.wait_until_ready()
         if not self.channel:
             return
-        if m.channel.id == self.channel.id:
-            if m.author.id == self.user.id:
+        if message.channel.id == self.channel.id:
+            if message.author.id == self.user.id:
                 color = 'cyan'
             else:
                 color = 'yellow'
 
-            cprint('{0.author}: {0.content}'.format(m), color)
+            match = [i.group(0) for i in re.finditer(r'<(@(!?|&?)|#)([0-9]+)>', message.content)]
+            if match:
+                for mention in match:
+                    mention_id = int(mention
+                                     .replace('<@', '')\
+                                     .replace('>', '')\
+                                     .replace('!', '')\
+                                     .replace('&', '')
+                                    )
+                    def check(role):
+                        return role.id == mention_id
+                    result = self.get_user(mention_id) or discord.utils.find(check, message.guild.roles)
+                    message.content = message.content.replace(mention, '@{}'.format(result))
+
+            cprint('{0.author}: {0.content}'.format(message), color)
 
     async def user_input(self):
         '''Captures user input as a background task asynchronusly'''
         await self.wait_until_ready()
         while not self.is_closed():
             try:
-                m = await ainput()
+                text = await ainput()
             except EOFError:
                 continue
-            if m:
-                ctx = await self.get_context(m)
+            if text:
+                ctx = await self.get_context(text)
 
                 ## MENTION CONVERT ##
-                match = [i.group(1).strip() for i in re.finditer(r'@([^ @]+)', m)]
+                match = [i.group(1).strip() for i in re.finditer(r'@([^ @]+)', text)]
                 if match:
                     for mention in match:
                         try:
@@ -100,14 +113,14 @@ class Bot(commands.Bot):
                                 result = None
 
                         if result is not None:
-                            m = m.replace('@' + mention, result.mention)
+                            text = text.replace('@' + mention, result.mention)
 
                 ## END OF MENTION CONVERt ##
 
                 if ctx.channel:
                     try:
                         if ctx.command is None:
-                            await self.channel.send(m)
+                            await self.channel.send(text)
                         else:
                             await ctx.command.invoke(ctx)
 

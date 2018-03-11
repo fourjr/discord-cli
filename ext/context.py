@@ -35,6 +35,7 @@ class Context(commands.Context):
         self.check_channel()
 
     def check_channel(self):
+        '''Checks if channel is defined and gives error messages'''
         if self.channel is None:
             try:
                 self.bot.channel = self.bot.get_channel(int(self.message.content))
@@ -47,4 +48,5 @@ class Context(commands.Context):
                     cprint('Text channel set: #{}'.format(self.bot.channel.name), 'green')
 
     async def send(self, *args, **kwargs):
+        '''Replaces Messageable.send because self._state does not exist'''
         await self.channel.send(*args, **kwargs)

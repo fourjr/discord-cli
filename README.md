@@ -32,7 +32,7 @@ python -m pip install -r requirements.txt
 
 Run the file
 ```
-python main.py <YOUR BOT/USER ACCOUNT TOKEN> <CHANNEL ID>
+python main.py <YOUR BOT/USER ACCOUNT TOKEN> -c=<CHANNEL ID>
 ```
 
 An example
