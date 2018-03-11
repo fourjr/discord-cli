@@ -2,6 +2,7 @@ import asyncio
 import sys
 import os
 import platform
+import re
 from argparse import ArgumentParser
 from collections import namedtuple
 
@@ -12,7 +13,7 @@ from box import Box
 from discord.ext import commands
 from termcolor import cprint, colored
 
-from context import Context
+from ext.context import Context
 
 parser = ArgumentParser(description='Runs a Discord Account in the CLI.', usage='main.py token [-c CHANNEL] [-h]')
 parser.add_argument('token', help='Your discord account/bot token')
@@ -23,9 +24,11 @@ colorama.init()
 
 ## CHECKS TO ENSURE YOU DON'T TRY TO LOAD UP WITH DOWNGRADED SHIT ##
 if float('.'.join(platform.python_version().split('.')[:2])) < 3.5:
-    cprint('\n'.join(('You are using an unsupported version of Python.',
-                      'Please upgrade to at least Python 3.5 to use discord-cli',
-                      'You are currently on ' + platform.python_version())), 'red')
+    cprint('\n'.join((
+        'You are using an unsupported version of Python.',
+        'Please upgrade to at least Python 3.5 to use discord-cli',
+        'You are currently on ' + platform.python_version()
+    )), 'red')
     exit(0)
 
 ### PROGRAM ###
@@ -35,9 +38,11 @@ class Bot(commands.Bot):
         super().__init__(command_prefix='/')
         self.loop.create_task(self.user_input())
         self.channel = None
+        self.role_converter = commands.RoleConverter()
+        self.member_converter = commands.MemberConverter()
 
-        for i in [i.replace('.py', '') for i in os.listdir('cogs') if i.endswith('.py')]:
-            self.load_extension('cogs.' + i)
+        for i in [i.replace('.py', '') for i in os.listdir('commands') if i.endswith('.py')]:
+            self.load_extension('commands.' + i)
 
         cprint('Logging in...', 'green')
         self.run()
@@ -82,9 +87,25 @@ class Bot(commands.Bot):
             if m:
                 ctx = await self.get_context(m)
 
+                ## MENTION CONVERT ##
+                match = [i.group(1).strip() for i in re.finditer(r'@([^ @]+)', m)]
+                if match:
+                    for mention in match:
+                        try:
+                            result = await self.member_converter.convert(ctx, mention)
+                        except commands.errors.BadArgument:
+                            try:
+                                result = await self.role_converter.convert(ctx, mention)
+                            except commands.errors.BadArgument:
+                                result = None
+
+                        if result is not None:
+                            m = m.replace('@' + mention, result.mention)
+
+                ## END OF MENTION CONVERt ##
+
                 if ctx.channel:
                     try:
-
                         if ctx.command is None:
                             await self.channel.send(m)
                         else:
@@ -115,6 +136,10 @@ class Bot(commands.Bot):
         ctx.prefix = invoked_prefix
         ctx.command = self.all_commands.get(invoker)
         return ctx
+
+    def get_all_guilds(self):
+        for guild in self.guilds:
+            yield guild
 
     def run(self):
         '''Starts the bot'''
