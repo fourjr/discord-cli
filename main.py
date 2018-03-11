@@ -28,6 +28,8 @@ if float('.'.join(platform.python_version().split('.')[:2])) < 3.9:
                       'You are currently on ' + platform.python_version())), 'red')
     exit(0)
 
+### PROGRAM ###
+
 class Bot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix='/')
