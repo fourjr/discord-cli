@@ -1,10 +1,13 @@
 import os
 import platform
+import json
 import re
 from argparse import ArgumentParser
 
 import colorama
 import discord
+import requests
+from getpass import getpass
 from discord.ext import commands
 from aioconsole.stream import ainput
 from termcolor import cprint
@@ -12,7 +15,7 @@ from termcolor import cprint
 from ext.context import Context
 
 parser = ArgumentParser(description='Runs a Discord Account in the CLI.', usage='main.py token [-c CHANNEL] [-h]')
-parser.add_argument('token', help='Your discord account/bot token')
+parser.add_argument('-t', '--token', help='Your discord account/bot token')
 parser.add_argument('-c', '--channel', help='A single default channel you want your account to run in', type=int)
 args = parser.parse_args()
 
@@ -33,6 +36,7 @@ class Bot(commands.Bot):
     '''Bot subclass to handle CLI IO'''
     def __init__(self):
         super().__init__(command_prefix='/')
+        self.session = self.http._session
         self.loop.create_task(self.user_input())
         self.channel = None
         self.is_bot = None
@@ -158,15 +162,84 @@ class Bot(commands.Bot):
 
     def run(self):
         '''Starts the bot'''
-        try:
-            self.loop.run_until_complete(self.start(args.token))
-        except discord.errors.LoginFailure:
+        if not getattr(args, 'token'):
+            
+            email = input('Enter your email: ')
+            password = getpass('Enter your password: ')
+            payload = {
+                'email': email,
+                'password': password,
+                'captcha_key': None,
+                'undelete': False
+            }
+            endpoint = 'https://discordapp.com/api/v6/auth/login'
+            # inspect.currentframe().f_back.f_code.co_name
+            with requests.post(endpoint, json=payload) as resp:
+                data = json.loads(resp.text)
+                if resp.status_code == 400:
+                    if data == {'password': ['Password does not match.']}:
+                        cprint('Invalid credentials provided.', 'red')
+                    elif data == {'email': ['Not a well formed email address.']}:
+                        cprint('Not a well formed email address.', 'red')
+                    elif data == {'captcha_key': ['captcha-required']}:
+                        cprint(''.join(('Due to certain limitations, in order to use this CLI with email/password. ',
+                                       'You would have to either:\n-Activate 2FA,',
+                                       '\n-Use a token to login, \n-Login on the actual discord recently')), 'red')
+                    else:
+                        cprint('Something else went wrong. Could be invalid email.', 'red')
+                    return
+
+            if data.get('mfa'):
+                cprint('2FA Required', 'cyan')
+                payload = {
+                    'ticket': data['ticket']
+                }
+                if data.get('sms'):
+                    cprint('\n'.join(('If you want your 2FA Code to be sent via SMS, input "SMS" without the quotes.',
+                                      'Else, input your 2FA Code.')), 'cyan'
+                          )
+
+                    sms = input('>')
+
+                    if sms.upper() == 'SMS':
+                        endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/sms/send'
+                        auth_code = json.loads(requests.post(endpoint, json=payload).text)
+                        cprint('Code has been sent to {}. Please enter your code below\n>'.format(auth_code['phone']), 'cyan')
+                        payload['code'] = input('>')
+
+                        endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/sms'
+                        auth = requests.post(endpoint, json=payload)
+
+                    elif sms in ('', '\n'):
+                        cprint('Invalid 2FA Code', 'red')
+
+                    else:
+                        payload['code'] = sms
+                        endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/totp'
+                        auth = requests.post(endpoint, json=payload)
+                else:
+                    payload['code'] = sms
+                    endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/totp'
+                    auth = requests.post(endpoint, json=payload)
+
+                auth_data = json.loads(auth.text)
+                if auth_data == {'code': 60008, 'message': 'Invalid two-factor code'}:
+                    cprint('Invalid 2FA Code', 'red')
+                    return
+
+                data['token'] = auth_data['token']
+
+            super().run(data['token'], bot=False)
+        else:
             try:
-                super().run(args.token, bot=False)
+                self.loop.run_until_complete(self.start(args.token))
             except discord.errors.LoginFailure:
-                print('Invalid token provided.')
-        finally:
-            self.loop.close()
+                try:
+                    super().run(args.token, bot=False)
+                except discord.errors.LoginFailure:
+                    cprint('Invalid token provided.', 'red')
+            finally:
+                self.loop.close()
 
 if __name__ == '__main__':
     Bot()

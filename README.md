@@ -21,6 +21,8 @@ TL;DR Don't blame me if you get banned.
 No.    
 This project is **far from complete**. Refer to some of the below sections for further explanation.
 
+You can read through the code and maybe learn some new things though :)
+
 ## How do you use this?
 I assume you already have at least Python 3.5 installed.    
 I also assume you have `git clone`d this.
@@ -32,13 +34,17 @@ python -m pip install -r requirements.txt
 
 Run the file
 ```
-python main.py <YOUR BOT/USER ACCOUNT TOKEN> -c=<CHANNEL ID>
+python main.py -t=<YOUR BOT/USER ACCOUNT TOKEN> -c=<CHANNEL ID>
 ```
 
 An example
 ```
-python main.py MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4 381870553235193857
+python main.py -t=MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4 -c=381870553235193857
 ```
+
+You can run the CLI without providing a token or a channel ID. If you do not provide a token, you will be prompted to include your email/password. This method does not work all the time, especially if you have not logged into Discord for a long time. It is still highly recommended to provide a token. 2FA is supported in this case. Of course, you would have to include a token if you are going to run this on the bot account.
+
+If you do not provide a chnanel ID, the user will log in with no specified channel. You would have to then input a channel ID for the CLI to work.
 
 ![image](https://i.imgur.com/QvY5GIM.png)    
 *An example of a functioning CLI*

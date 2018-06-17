@@ -1,6 +1,4 @@
 import asyncio
-import discord.abc
-import discord.utils
 from discord.ext import commands
 from termcolor import cprint
 
