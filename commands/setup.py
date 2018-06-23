@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 from termcolor import cprint
 
+from ext.table import Table
+
 
 class GuildConverter(commands.IDConverter):
     '''Converts to a :class:`discord.Guild`.
@@ -41,11 +43,13 @@ class Setup:
         await self.bot.logout()
 
     @commands.command()
-    async def channel(self, ctx, channel_, guild: GuildConverter = None):
+    async def channel(self, ctx, channel_ = None, guild: GuildConverter = None):
         '''Changes channels'''
-        if guild:
-            ctx.guild = guild
-        self.bot.channel = await self.text_channel_conv.convert(ctx, channel_.replace('#', ''))
+        self.bot.pause()
+        Table(ctx, self.channel_callback, *[i.name for i in ctx.guild.text_channels if i.permissions_for(ctx.guild.me).read_messages]).start()
+
+    def channel_callback(self, ctx, name):
+        self.bot.channel = discord.utils.get(ctx.guild.text_channels, name=name)
         cprint('Text channel set: #{0.name} in {0.guild.name}'.format(self.bot.channel), 'green')
 
     @commands.command(name='help')

@@ -14,7 +14,7 @@ class ConsoleMessage:
     '''
 
     def __init__(self, content, bot):
-        self.content = content
+        self.content = content.strip()
         self.channel = bot.channel
         self.guild = getattr(bot.channel, 'guild', False) or None
 

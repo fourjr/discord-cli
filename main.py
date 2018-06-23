@@ -1,15 +1,16 @@
+import curses
+import json
 import os
 import platform
-import json
 import re
 from argparse import ArgumentParser
+from getpass import getpass
 
 import colorama
 import discord
 import requests
-from getpass import getpass
-from discord.ext import commands
 from aioconsole.stream import ainput
+from discord.ext import commands
 from termcolor import cprint
 
 from ext.context import Context
@@ -40,6 +41,7 @@ class Bot(commands.Bot):
         self.loop.create_task(self.user_input())
         self.channel = None
         self.is_bot = None
+        self.paused = False
         self.role_converter = commands.RoleConverter()
         self.member_converter = commands.MemberConverter()
         self.remove_command('help')
@@ -49,6 +51,9 @@ class Bot(commands.Bot):
 
         cprint('Logging in...', 'green')
         self.run()
+
+    def pause(self):
+        self.paused = True
 
     async def on_connect(self):
         '''Sets the client presence'''
@@ -71,7 +76,7 @@ class Bot(commands.Bot):
     async def on_message(self, message):
         '''Prints to console upon new message'''
         await self.wait_until_ready()
-        if not self.channel:
+        if not self.channel or self.paused:
             return
         if message.channel.id == self.channel.id:
             if message.author.id == self.user.id:
@@ -86,11 +91,12 @@ class Bot(commands.Bot):
                                      .replace('<@', '')\
                                      .replace('>', '')\
                                      .replace('!', '')\
-                                     .replace('&', '')
+                                     .replace('&', '')\
+                                     .replace('<#', '')
                                     )
                     def check(role):
                         return role.id == mention_id
-                    result = self.get_user(mention_id) or discord.utils.find(check, message.guild.roles)
+                    result = self.get_user(mention_id) or discord.utils.find(check, message.guild.roles) or self.get_channel(mention_id)
                     message.content = message.content.replace(mention, '@{}'.format(result))
 
             cprint('{0.author}: {0.content}'.format(message), color)
@@ -99,6 +105,8 @@ class Bot(commands.Bot):
         '''Captures user input as a background task asynchronusly'''
         await self.wait_until_ready()
         while not self.is_closed():
+            if self.paused:
+                continue
             try:
                 text = await ainput()
             except EOFError:
