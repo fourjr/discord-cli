@@ -1,4 +1,4 @@
-import curses
+import aiohttp
 import json
 import os
 import platform
@@ -22,7 +22,7 @@ args = parser.parse_args()
 
 colorama.init()
 
-## CHECKS TO ENSURE YOU DON'T TRY TO LOAD UP WITH DOWNGRADED SHIT ##
+# CHECKS TO ENSURE YOU DON'T TRY TO LOAD UP WITH UNSUPPORTED #
 if float('.'.join(platform.python_version().split('.')[:2])) < 3.5:
     cprint('\n'.join((
         'You are using an unsupported version of Python.',
@@ -31,13 +31,14 @@ if float('.'.join(platform.python_version().split('.')[:2])) < 3.5:
     )), 'red')
     exit(0)
 
-### PROGRAM ###
+# PROGRAM #
+
 
 class Bot(commands.Bot):
     '''Bot subclass to handle CLI IO'''
     def __init__(self):
         super().__init__(command_prefix='/')
-        self.session = self.http._session
+        self.session = aiohttp.ClientSession(loop=self.loop)
         self.loop.create_task(self.user_input())
         self.channel = None
         self.is_bot = None
@@ -87,13 +88,15 @@ class Bot(commands.Bot):
             match = [i.group(0) for i in re.finditer(r'<(@(!?|&?)|#)([0-9]+)>', message.content)]
             if match:
                 for mention in match:
-                    mention_id = int(mention
-                                     .replace('<@', '')\
-                                     .replace('>', '')\
-                                     .replace('!', '')\
-                                     .replace('&', '')\
-                                     .replace('<#', '')
-                                    )
+                    mention_id = int(
+                        mention
+                        .replace('<@', '')
+                        .replace('>', '')
+                        .replace('!', '')
+                        .replace('&', '')
+                        .replace('<#', '')
+                    )
+
                     def check(role):
                         return role.id == mention_id
                     result = self.get_user(mention_id) or discord.utils.find(check, message.guild.roles) or self.get_channel(mention_id)
@@ -114,7 +117,7 @@ class Bot(commands.Bot):
             if text:
                 ctx = await self.get_context(text)
 
-                ## MENTION CONVERT ##
+                # MENTION CONVERT #
                 match = [i.group(1).strip() for i in re.finditer(r'@([^ @]+)', text)]
                 if match:
                     for mention in match:
@@ -129,7 +132,7 @@ class Bot(commands.Bot):
                         if result is not None:
                             text = text.replace('@' + mention, result.mention)
 
-                ## END OF MENTION CONVERt ##
+                # END OF MENTION CONVERt #
 
                 if ctx.channel:
                     try:
@@ -171,7 +174,7 @@ class Bot(commands.Bot):
     def run(self):
         '''Starts the bot'''
         if not getattr(args, 'token'):
-            
+
             email = input('Enter your email: ')
             password = getpass('Enter your password: ')
             payload = {
@@ -191,8 +194,8 @@ class Bot(commands.Bot):
                         cprint('Not a well formed email address.', 'red')
                     elif data == {'captcha_key': ['captcha-required']}:
                         cprint(''.join(('Due to certain limitations, in order to use this CLI with email/password. ',
-                                       'You would have to either:\n-Activate 2FA,',
-                                       '\n-Use a token to login, \n-Login on the actual discord recently')), 'red')
+                                        'You would have to either:\n-Activate 2FA,',
+                                        '\n-Use a token to login, \n-Login on the actual discord recently')), 'red')
                     else:
                         cprint('Something else went wrong. Could be invalid email.', 'red')
                     return
@@ -248,6 +251,7 @@ class Bot(commands.Bot):
                     cprint('Invalid token provided.', 'red')
             finally:
                 self.loop.close()
+
 
 if __name__ == '__main__':
     Bot()

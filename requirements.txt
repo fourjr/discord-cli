@@ -1,5 +1,5 @@
 termcolor
 colorama
-git+https://www.github.com/Rapptz/discord.py@rewrite
+discord.py
 aioconsole
 keyboard

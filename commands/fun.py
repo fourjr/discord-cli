@@ -1,6 +1,7 @@
 from discord.ext import commands
 
-class Fun:
+
+class Fun(commands.Cog):
     '''The cog consists of fun and misc commands'''
     def __init__(self, bot):
         self.bot = bot
@@ -18,6 +19,7 @@ class Fun:
         if ctx.invoked_with == 'shortcut':
             return await ctx.send(ctx.message.content)
         await ctx.send(self.shortcuts[ctx.invoked_with])
+
 
 def setup(bot):
     '''Adds the cog'''

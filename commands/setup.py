@@ -32,7 +32,8 @@ class GuildConverter(commands.IDConverter):
 
         return result
 
-class Setup:
+
+class Setup(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.text_channel_conv = commands.TextChannelConverter()
@@ -43,7 +44,7 @@ class Setup:
         await self.bot.logout()
 
     @commands.command()
-    async def channel(self, ctx, channel_ = None, guild: GuildConverter = None):
+    async def channel(self, ctx, channel_=None, guild: GuildConverter=None):
         '''Changes channels'''
         self.bot.pause()
         Table(ctx, self.channel_callback, *[i.name for i in ctx.guild.text_channels if i.permissions_for(ctx.guild.me).read_messages]).start()
@@ -56,6 +57,7 @@ class Setup:
     async def help_(self, ctx):
         '''Shows this message'''
         cprint('\n'.join(i.name + ' - ' + i.short_doc for i in self.bot.commands), 'cyan')
+
 
 def setup(bot):
     bot.add_cog(Setup(bot))
