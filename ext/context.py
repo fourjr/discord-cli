@@ -43,7 +43,10 @@ class Context(commands.Context):
                 if self.bot.channel is None:
                     cprint('Invalid text channel.', 'red')
                 else:
-                    cprint('Text channel set: #{}'.format(self.bot.channel.name), 'green')
+                    if hasattr(self.bot.channel, "name"):
+                        cprint('Text channel set: #{}'.format(self.bot.channel.name), 'green')
+                    else:
+                        cprint('Text channel set: #{}'.format(self.bot.channel), 'green')
 
     async def send(self, *args, **kwargs):
         '''Replaces Messageable.send because self._state does not exist'''
