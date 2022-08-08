@@ -3,4 +3,3 @@ colorama
 discord.py
 aioconsole
 keyboard
-PyInputPlus
