@@ -23,7 +23,7 @@ args = parser.parse_args()
 colorama.init()
 
 # CHECKS TO ENSURE YOU DON'T TRY TO LOAD UP WITH UNSUPPORTED #
-if float('.'.join(platform.python_version().split('.')[:2])) < 3.5:
+if not (platform.python_version().split('.')[0] == 3 and platform.python_version().split('.')[1] >= 5): #compadability with 3.10+
     cprint('\n'.join((
         'You are using an unsupported version of Python.',
         'Please upgrade to at least Python 3.5 to use discord-cli',
@@ -36,6 +36,7 @@ if float('.'.join(platform.python_version().split('.')[:2])) < 3.5:
 
 class Bot(commands.Bot):
     '''Bot subclass to handle CLI IO'''
+    #I cant move cousor with arrows, so - rewriteing
     def __init__(self):
         super().__init__(command_prefix='/')
         self.session = aiohttp.ClientSession(loop=self.loop)
