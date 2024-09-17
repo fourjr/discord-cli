@@ -1,3 +1,4 @@
+import asyncio
 import aiohttp
 import json
 import os
@@ -22,24 +23,13 @@ args = parser.parse_args()
 
 colorama.init()
 
-# CHECKS TO ENSURE YOU DON'T TRY TO LOAD UP WITH UNSUPPORTED #
-if float('.'.join(platform.python_version().split('.')[:2])) < 3.5:
-    cprint('\n'.join((
-        'You are using an unsupported version of Python.',
-        'Please upgrade to at least Python 3.5 to use discord-cli',
-        'You are currently on ' + platform.python_version()
-    )), 'red')
-    exit(0)
-
 # PROGRAM #
-
 
 class Bot(commands.Bot):
     '''Bot subclass to handle CLI IO'''
     def __init__(self):
-        super().__init__(command_prefix='/')
-        self.session = aiohttp.ClientSession(loop=self.loop)
-        self.loop.create_task(self.user_input())
+        intents = discord.Intents.all()  # Ensure intents are set here
+        super().__init__(command_prefix='/', intents=intents)
         self.channel = None
         self.is_bot = None
         self.paused = False
@@ -47,14 +37,17 @@ class Bot(commands.Bot):
         self.member_converter = commands.MemberConverter()
         self.remove_command('help')
 
-        for i in [i.replace('.py', '') for i in os.listdir('commands') if i.endswith('.py')]:
-            self.load_extension('commands.' + i)
-
         cprint('Logging in...', 'green')
-        self.run()
 
-    def pause(self):
-        self.paused = True
+    async def setup(self):
+        self.session = aiohttp.ClientSession()  # Create session in async context
+
+        # Load extensions asynchronously
+        for i in [i.replace('.py', '') for i in os.listdir('commands') if i.endswith('.py')]:
+            await self.load_extension('commands.' + i)
+
+        asyncio.create_task(self.user_input())  # Use asyncio.create_task to create tasks asynchronously
+        await self.start(args.token)
 
     async def on_connect(self):
         '''Sets the client presence'''
@@ -132,7 +125,7 @@ class Bot(commands.Bot):
                         if result is not None:
                             text = text.replace('@' + mention, result.mention)
 
-                # END OF MENTION CONVERt #
+                # END OF MENTION CONVERT #
 
                 if ctx.channel:
                     try:
@@ -167,91 +160,12 @@ class Bot(commands.Bot):
         ctx.command = self.all_commands.get(invoker)
         return ctx
 
-    def get_all_guilds(self):
-        for guild in self.guilds:
-            yield guild
+    async def close(self):
+        await self.session.close()
+        await super().close()
 
     def run(self):
-        '''Starts the bot'''
-        if not getattr(args, 'token'):
-
-            email = input('Enter your email: ')
-            password = getpass('Enter your password: ')
-            payload = {
-                'email': email,
-                'password': password,
-                'captcha_key': None,
-                'undelete': False
-            }
-            endpoint = 'https://discordapp.com/api/v6/auth/login'
-            # inspect.currentframe().f_back.f_code.co_name
-            with requests.post(endpoint, json=payload) as resp:
-                data = json.loads(resp.text)
-                if resp.status_code == 400:
-                    if data == {'password': ['Password does not match.']}:
-                        cprint('Invalid credentials provided.', 'red')
-                    elif data == {'email': ['Not a well formed email address.']}:
-                        cprint('Not a well formed email address.', 'red')
-                    elif data == {'captcha_key': ['captcha-required']}:
-                        cprint(''.join(('Due to certain limitations, in order to use this CLI with email/password. ',
-                                        'You would have to either:\n-Activate 2FA,',
-                                        '\n-Use a token to login, \n-Login on the actual discord recently')), 'red')
-                    else:
-                        cprint('Something else went wrong. Could be invalid email.', 'red')
-                    return
-
-            if data.get('mfa'):
-                cprint('2FA Required', 'cyan')
-                payload = {
-                    'ticket': data['ticket']
-                }
-                if data.get('sms'):
-                    cprint('\n'.join(('If you want your 2FA Code to be sent via SMS, input "SMS" without the quotes.',
-                                      'Else, input your 2FA Code.')), 'cyan'
-                          )
-
-                    sms = input('>')
-
-                    if sms.upper() == 'SMS':
-                        endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/sms/send'
-                        auth_code = json.loads(requests.post(endpoint, json=payload).text)
-                        cprint('Code has been sent to {}. Please enter your code below\n>'.format(auth_code['phone']), 'cyan')
-                        payload['code'] = input('>')
-
-                        endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/sms'
-                        auth = requests.post(endpoint, json=payload)
-
-                    elif sms in ('', '\n'):
-                        cprint('Invalid 2FA Code', 'red')
-
-                    else:
-                        payload['code'] = sms
-                        endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/totp'
-                        auth = requests.post(endpoint, json=payload)
-                else:
-                    payload['code'] = sms
-                    endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/totp'
-                    auth = requests.post(endpoint, json=payload)
-
-                auth_data = json.loads(auth.text)
-                if auth_data == {'code': 60008, 'message': 'Invalid two-factor code'}:
-                    cprint('Invalid 2FA Code', 'red')
-                    return
-
-                data['token'] = auth_data['token']
-
-            super().run(data['token'], bot=False)
-        else:
-            try:
-                self.loop.run_until_complete(self.start(args.token))
-            except discord.errors.LoginFailure:
-                try:
-                    super().run(args.token, bot=False)
-                except discord.errors.LoginFailure:
-                    cprint('Invalid token provided.', 'red')
-            finally:
-                self.loop.close()
-
+        asyncio.run(self.setup())  # Run the setup with asyncio
 
 if __name__ == '__main__':
-    Bot()
+    Bot().run()

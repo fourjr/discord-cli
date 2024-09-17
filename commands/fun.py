@@ -21,6 +21,6 @@ class Fun(commands.Cog):
         await ctx.send(self.shortcuts[ctx.invoked_with])
 
 
-def setup(bot):
+async def setup(bot):
     '''Adds the cog'''
-    bot.add_cog(Fun(bot))
+    await bot.add_cog(Fun(bot))

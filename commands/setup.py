@@ -59,5 +59,5 @@ class Setup(commands.Cog):
         cprint('\n'.join(i.name + ' - ' + i.short_doc for i in self.bot.commands), 'cyan')
 
 
-def setup(bot):
-    bot.add_cog(Setup(bot))
+async def setup(bot):
+    await bot.add_cog(Setup(bot))
