@@ -1,257 +1,286 @@
-import aiohttp
-import json
+"""A small, bot-account-only Discord terminal client."""
+
+import argparse
+import asyncio
 import os
-import platform
-import re
-from argparse import ArgumentParser
-from getpass import getpass
+import shlex
 
 import colorama
 import discord
-import requests
 from aioconsole.stream import ainput
-from discord.ext import commands
 from termcolor import cprint
 
-from ext.context import Context
 
-parser = ArgumentParser(description='Runs a Discord Account in the CLI.', usage='main.py token [-c CHANNEL] [-h]')
-parser.add_argument('-t', '--token', help='Your discord account/bot token')
-parser.add_argument('-c', '--channel', help='A single default channel you want your account to run in', type=int)
-args = parser.parse_args()
-
-colorama.init()
-
-# CHECKS TO ENSURE YOU DON'T TRY TO LOAD UP WITH UNSUPPORTED #
-if float('.'.join(platform.python_version().split('.')[:2])) < 3.5:
-    cprint('\n'.join((
-        'You are using an unsupported version of Python.',
-        'Please upgrade to at least Python 3.5 to use discord-cli',
-        'You are currently on ' + platform.python_version()
-    )), 'red')
-    exit(0)
-
-# PROGRAM #
+DEFAULT_HISTORY_LIMIT = 20
+MAX_HISTORY_LIMIT = 100
 
 
-class Bot(commands.Bot):
-    '''Bot subclass to handle CLI IO'''
-    def __init__(self):
-        super().__init__(command_prefix='/')
-        self.session = aiohttp.ClientSession(loop=self.loop)
-        self.loop.create_task(self.user_input())
+def parse_history_limit(value=None):
+    """Return a valid Discord message-history limit (1-100)."""
+    if value is None:
+        return DEFAULT_HISTORY_LIMIT
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("history limit must be an integer between 1 and 100")
+    if not 1 <= limit <= MAX_HISTORY_LIMIT:
+        raise ValueError("history limit must be between 1 and 100")
+    return limit
+
+
+def format_message(message):
+    """Format one Discord message for the terminal."""
+    timestamp = message.created_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+    content = message.clean_content or message.content or "[no text content]"
+    content = content.replace("\r", " ").replace("\n", " ")
+    return "[{0}] {1}: {2}".format(timestamp, message.author, content)
+
+
+class Bot(discord.Client):
+    """Connect a bot account and provide a line-oriented terminal UI."""
+
+    shortcuts = {
+        "shrug": r"¯\\\_(ツ)\_/¯",
+        "tableflip": "(╯°□°）╯︵ ┻━┻",
+        "unflip": "┬─┬﻿ ノ( ゜-゜ノ)",
+        "lenny": "( ͡° ͜ʖ ͡°)",
+    }
+
+    def __init__(self, channel_id=None):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        super().__init__(intents=intents)
+        self.channel_id = channel_id
         self.channel = None
-        self.is_bot = None
-        self.paused = False
-        self.role_converter = commands.RoleConverter()
-        self.member_converter = commands.MemberConverter()
-        self.remove_command('help')
+        self.input_task = None
 
-        for i in [i.replace('.py', '') for i in os.listdir('commands') if i.endswith('.py')]:
-            self.load_extension('commands.' + i)
-
-        cprint('Logging in...', 'green')
-        self.run()
-
-    def pause(self):
-        self.paused = True
-
-    async def on_connect(self):
-        '''Sets the client presence'''
-        self.is_bot = self._connection.is_bot
-        await self.change_presence(status=discord.Status.offline, afk=True)
+    async def setup_hook(self):
+        """Start the interactive input task after the client is initialized."""
+        self.input_task = asyncio.create_task(self.user_input())
 
     async def on_ready(self):
-        '''Sets up the channel'''
-        self.channel = self.get_channel(args.channel)
-
-        if self.channel is None:
-            if args.channel is not None:
-                cprint('Invalid channel ID provided.', 'red')
-
-            cprint('\n'.join(('Logged in as {0.user} in no specified channel.'.format(self),
-                              'Send a channel ID to start the program')), 'green')
-        else:
-            cprint('Logged in as {0.user} in #{0.channel}'.format(self), 'green')
+        """Resolve an optional starting channel and show the bot identity."""
+        if self.user is not None:
+            cprint("Logged in as {0} (bot account).".format(self.user), "green")
+        if self.channel_id is not None:
+            await self.set_channel(self.channel_id)
+        cprint(
+            "Type /help for commands. Messages are sent to the selected channel.",
+            "cyan",
+        )
 
     async def on_message(self, message):
-        '''Prints to console upon new message'''
-        await self.wait_until_ready()
-        if not self.channel or self.paused:
+        """Print incoming and outgoing messages from the selected channel."""
+        if self.channel is None or message.channel.id != self.channel.id:
             return
-        if message.channel.id == self.channel.id:
-            if message.author.id == self.user.id:
-                color = 'cyan'
-            else:
-                color = 'yellow'
+        color = "cyan" if self.user and message.author.id == self.user.id else "yellow"
+        cprint(format_message(message), color)
 
-            match = [i.group(0) for i in re.finditer(r'<(@(!?|&?)|#)([0-9]+)>', message.content)]
-            if match:
-                for mention in match:
-                    mention_id = int(
-                        mention
-                        .replace('<@', '')
-                        .replace('>', '')
-                        .replace('!', '')
-                        .replace('&', '')
-                        .replace('<#', '')
+    async def close(self):
+        """Stop the input loop before closing the Discord connection."""
+        current_task = asyncio.current_task()
+        if (
+            self.input_task is not None
+            and self.input_task is not current_task
+            and not self.input_task.done()
+        ):
+            self.input_task.cancel()
+        await super().close()
+
+    async def set_channel(self, channel_id):
+        """Select a channel by its Discord snowflake ID."""
+        try:
+            channel_id = int(channel_id)
+        except (TypeError, ValueError):
+            cprint("Channel ID must be an integer.", "red")
+            return False
+
+        channel = self.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await self.fetch_channel(channel_id)
+            except (
+                discord.NotFound,
+                discord.Forbidden,
+                discord.HTTPException,
+            ) as error:
+                cprint("Could not access channel: {0}".format(error), "red")
+                return False
+
+        if not isinstance(channel, discord.abc.Messageable):
+            cprint("That channel cannot receive messages.", "red")
+            return False
+
+        self.channel = channel
+        self.channel_id = channel_id
+        cprint("Selected channel {0} ({1}).".format(channel, channel_id), "green")
+        return True
+
+    def list_guilds(self):
+        """Print guilds visible to the bot over the Gateway."""
+        if not self.guilds:
+            cprint("The bot is not connected to any servers.", "yellow")
+            return
+        for guild in sorted(self.guilds, key=lambda item: item.name.casefold()):
+            cprint("{0}  {1}".format(guild.id, guild.name), "cyan")
+
+    def list_channels(self, guild_id=None):
+        """Print readable text channels, optionally scoped to a guild ID."""
+        if guild_id is None and self.channel is not None:
+            guild = getattr(self.channel, "guild", None)
+        else:
+            try:
+                guild = self.get_guild(int(guild_id))
+            except (TypeError, ValueError):
+                guild = None
+        if guild is None:
+            cprint("Use /channels <server-id> or /guilds to find a server.", "yellow")
+            return
+        channels = [channel for channel in guild.text_channels]
+        if not channels:
+            cprint(
+                "No text channels are available in {0}.".format(guild.name), "yellow"
+            )
+            return
+        for channel in channels:
+            cprint("{0}  #{1}".format(channel.id, channel.name), "cyan")
+
+    async def show_history(self, limit=None):
+        """Print recent messages from the selected channel, oldest first."""
+        if self.channel is None:
+            cprint("Select a channel first with /channel <channel-id>.", "red")
+            return
+        try:
+            limit = parse_history_limit(limit)
+        except ValueError as error:
+            cprint(str(error), "red")
+            return
+        try:
+            messages = [message async for message in self.channel.history(limit=limit)]
+        except (discord.Forbidden, discord.HTTPException) as error:
+            cprint("Could not read channel history: {0}".format(error), "red")
+            return
+        if not messages:
+            cprint("No messages found.", "yellow")
+            return
+        for message in reversed(messages):
+            color = (
+                "cyan" if self.user and message.author.id == self.user.id else "yellow"
+            )
+            cprint(format_message(message), color)
+
+    async def handle_command(self, text):
+        """Run a local command; incoming Discord messages are never commands."""
+        try:
+            parts = shlex.split(text[1:])
+        except ValueError as error:
+            cprint("Could not parse command: {0}".format(error), "red")
+            return
+        if not parts:
+            return
+
+        name, *arguments = parts
+        name = name.casefold()
+        if name == "help":
+            cprint(
+                "\n".join(
+                    (
+                        "/guilds - list servers the bot has joined",
+                        "/channels [server-id] - list text channels",
+                        "/channel <channel-id> - select a channel",
+                        "/history [1-100] - show recent messages (default 20)",
+                        "/shrug, /tableflip, /unflip, /lenny - send a shortcut",
+                        "/logout - disconnect",
+                        "Any other line is sent as a message to the selected channel.",
                     )
+                ),
+                "cyan",
+            )
+        elif name == "guilds":
+            self.list_guilds()
+        elif name == "channels":
+            if len(arguments) > 1:
+                cprint("Usage: /channels [server-id]", "red")
+            else:
+                self.list_channels(arguments[0] if arguments else None)
+        elif name == "channel":
+            if len(arguments) != 1:
+                cprint(
+                    "Usage: /channel <channel-id> (use /channels to list channels)",
+                    "red",
+                )
+            else:
+                await self.set_channel(arguments[0])
+        elif name == "history":
+            if len(arguments) > 1:
+                cprint("Usage: /history [1-100]", "red")
+            else:
+                await self.show_history(arguments[0] if arguments else None)
+        elif name in self.shortcuts:
+            if arguments:
+                cprint("Usage: /{0}".format(name), "red")
+            else:
+                await self.send_message(self.shortcuts[name])
+        elif name == "logout":
+            await self.close()
+        else:
+            cprint("Unknown command. Type /help for the command list.", "red")
 
-                    def check(role):
-                        return role.id == mention_id
-                    result = self.get_user(mention_id) or discord.utils.find(check, message.guild.roles) or self.get_channel(mention_id)
-                    message.content = message.content.replace(mention, '@{}'.format(result))
-
-            cprint('{0.author}: {0.content}'.format(message), color)
+    async def send_message(self, content):
+        """Send text to the selected channel."""
+        if self.channel is None:
+            cprint("Select a channel first with /channel <channel-id>.", "red")
+            return
+        try:
+            await self.channel.send(content)
+        except (discord.Forbidden, discord.HTTPException) as error:
+            cprint("Could not send message: {0}".format(error), "red")
 
     async def user_input(self):
-        '''Captures user input as a background task asynchronusly'''
+        """Read terminal input asynchronously and route commands/messages."""
         await self.wait_until_ready()
         while not self.is_closed():
-            if self.paused:
-                continue
             try:
-                text = await ainput()
-            except EOFError:
+                text = (await ainput("> ")).strip()
+            except (EOFError, asyncio.CancelledError):
+                if not self.is_closed():
+                    await self.close()
+                return
+            if not text:
                 continue
-            if text:
-                ctx = await self.get_context(text)
-
-                # MENTION CONVERT #
-                match = [i.group(1).strip() for i in re.finditer(r'@([^ @]+)', text)]
-                if match:
-                    for mention in match:
-                        try:
-                            result = await self.member_converter.convert(ctx, mention)
-                        except commands.errors.BadArgument:
-                            try:
-                                result = await self.role_converter.convert(ctx, mention)
-                            except commands.errors.BadArgument:
-                                result = None
-
-                        if result is not None:
-                            text = text.replace('@' + mention, result.mention)
-
-                # END OF MENTION CONVERt #
-
-                if ctx.channel:
-                    try:
-                        if ctx.command is None:
-                            await self.channel.send(text)
-                        else:
-                            await ctx.command.invoke(ctx)
-
-                    except discord.DiscordException as error:
-                        cprint(error, 'red')
-
-    async def get_context(self, message):
-        '''Overwrites the default get_context'''
-
-        view = commands.view.StringView(message)
-        ctx = Context(view=view, bot=self, message=message)
-
-        prefix = await self.get_prefix(message)
-        invoked_prefix = prefix
-
-        if isinstance(prefix, str):
-            if not view.skip_string(prefix):
-                return ctx
-        else:
-            invoked_prefix = discord.utils.find(view.skip_string, prefix)
-            if invoked_prefix is None:
-                return ctx
-
-        invoker = view.get_word()
-        ctx.invoked_with = invoker
-        ctx.prefix = invoked_prefix
-        ctx.command = self.all_commands.get(invoker)
-        return ctx
-
-    def get_all_guilds(self):
-        for guild in self.guilds:
-            yield guild
-
-    def run(self):
-        '''Starts the bot'''
-        if not getattr(args, 'token'):
-
-            email = input('Enter your email: ')
-            password = getpass('Enter your password: ')
-            payload = {
-                'email': email,
-                'password': password,
-                'captcha_key': None,
-                'undelete': False
-            }
-            endpoint = 'https://discordapp.com/api/v6/auth/login'
-            # inspect.currentframe().f_back.f_code.co_name
-            with requests.post(endpoint, json=payload) as resp:
-                data = json.loads(resp.text)
-                if resp.status_code == 400:
-                    if data == {'password': ['Password does not match.']}:
-                        cprint('Invalid credentials provided.', 'red')
-                    elif data == {'email': ['Not a well formed email address.']}:
-                        cprint('Not a well formed email address.', 'red')
-                    elif data == {'captcha_key': ['captcha-required']}:
-                        cprint(''.join(('Due to certain limitations, in order to use this CLI with email/password. ',
-                                        'You would have to either:\n-Activate 2FA,',
-                                        '\n-Use a token to login, \n-Login on the actual discord recently')), 'red')
-                    else:
-                        cprint('Something else went wrong. Could be invalid email.', 'red')
-                    return
-
-            if data.get('mfa'):
-                cprint('2FA Required', 'cyan')
-                payload = {
-                    'ticket': data['ticket']
-                }
-                if data.get('sms'):
-                    cprint('\n'.join(('If you want your 2FA Code to be sent via SMS, input "SMS" without the quotes.',
-                                      'Else, input your 2FA Code.')), 'cyan'
-                          )
-
-                    sms = input('>')
-
-                    if sms.upper() == 'SMS':
-                        endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/sms/send'
-                        auth_code = json.loads(requests.post(endpoint, json=payload).text)
-                        cprint('Code has been sent to {}. Please enter your code below\n>'.format(auth_code['phone']), 'cyan')
-                        payload['code'] = input('>')
-
-                        endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/sms'
-                        auth = requests.post(endpoint, json=payload)
-
-                    elif sms in ('', '\n'):
-                        cprint('Invalid 2FA Code', 'red')
-
-                    else:
-                        payload['code'] = sms
-                        endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/totp'
-                        auth = requests.post(endpoint, json=payload)
-                else:
-                    payload['code'] = sms
-                    endpoint = 'https://canary.discordapp.com/api/v6/auth/mfa/totp'
-                    auth = requests.post(endpoint, json=payload)
-
-                auth_data = json.loads(auth.text)
-                if auth_data == {'code': 60008, 'message': 'Invalid two-factor code'}:
-                    cprint('Invalid 2FA Code', 'red')
-                    return
-
-                data['token'] = auth_data['token']
-
-            super().run(data['token'], bot=False)
-        else:
-            try:
-                self.loop.run_until_complete(self.start(args.token))
-            except discord.errors.LoginFailure:
-                try:
-                    super().run(args.token, bot=False)
-                except discord.errors.LoginFailure:
-                    cprint('Invalid token provided.', 'red')
-            finally:
-                self.loop.close()
+            if text.startswith("/"):
+                await self.handle_command(text)
+            elif self.channel is None and text.isdecimal():
+                await self.set_channel(text)
+            else:
+                await self.send_message(text)
 
 
-if __name__ == '__main__':
-    Bot()
+def build_parser():
+    """Build the CLI argument parser."""
+    parser = argparse.ArgumentParser(
+        description="Run a Discord bot account in the CLI."
+    )
+    parser.add_argument(
+        "-t", "--token", help="Discord bot token (or set DISCORD_BOT_TOKEN)"
+    )
+    parser.add_argument("-c", "--channel", type=int, help="Optional initial channel ID")
+    return parser
+
+
+def main():
+    """Start the bot-only terminal client."""
+    colorama.init()
+    parser = build_parser()
+    args = parser.parse_args()
+    token = args.token or os.environ.get("DISCORD_BOT_TOKEN")
+    if not token:
+        parser.error("provide a bot token with --token or DISCORD_BOT_TOKEN")
+    try:
+        Bot(channel_id=args.channel).run(token)
+    except discord.LoginFailure:
+        cprint("Invalid bot token. User account tokens are not supported.", "red")
+
+
+if __name__ == "__main__":
+    main()

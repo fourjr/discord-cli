@@ -1,5 +1,4 @@
-termcolor
-colorama
-discord.py
-aioconsole
-keyboard
+discord.py>=2.4,<3.0
+aioconsole>=0.8,<1.0
+colorama>=0.4,<1.0
+termcolor>=2.4,<4.0

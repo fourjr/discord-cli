@@ -1,65 +1,135 @@
 # discord-cli
-A command line interface to use Discord.
 
-## DISCLAIMER - PLEASE READ
-This is for the 99.7% who refuse to read Discord ToS (and possibly this disclaimer as well).
+A small terminal client for a Discord **bot account**. Select a channel, send
+messages, inspect recent history, and optionally expose read-only Discord tools
+over MCP.
 
-This project wasn't meant to replace discord's official client in any way shape or form.    
-If your account gets banned, don't come creating 700 Github Issues with you 2000 alts. I already warned you here.
+> This project no longer supports normal user accounts or user tokens. Discord
+> [prohibits self-bots](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots);
+> create a bot application and use its bot token instead.
 
-Using this program with a user account is much more dangerous than a bot account. I'm using `discord.py 1.0.0a` right here. It has `user-agent`s in it's requests to the Discord API to say that it isn't a client which means it isn't hard for Discord to realise that you aren't using the client.
+## Requirements
 
-This program will also allow you to send embeds (in the future). Sending these will raise a high alert as user accounts technically in the official clients aren't allowed to do this.
+- Python 3.8 or later for the CLI.
+- A Discord application with a bot user, installed in the server(s) it should
+  access.
+- The bot needs `View Channels`, `Read Message History`, and `Send Messages` in
+  the channels you use. Enable **Message Content Intent** in the Developer
+  Portal and in the client; Discord treats this as a privileged Gateway intent.
 
-Using external clients were against Discord's wish and will from the start. Always was against the terms of service but there are still people who do this. 
+Install the CLI dependencies:
 
-If you have finished reading this, and still want to have some super cool command line discord, go ahead and read on! Else, you better close this tab and clear your history before you get bANNed!
-
-TL;DR Don't blame me if you get banned.
-
-## Is this project meant for production?
-No.    
-This project is **far from complete**. Refer to some of the below sections for further explanation.
-
-You can read through the code and maybe learn some new things though :)
-
-## How do you use this?
-I assume you already have at least Python 3.5 installed.    
-I also assume you have `git clone`d this.
-
-Install requirements from `requirements.txt`
-```
+```sh
 python -m pip install -r requirements.txt
 ```
 
-Run the file
+## Run the CLI
+
+Set the bot token in the environment (recommended so it is not included in the
+process command line), then start the client:
+
+```sh
+export DISCORD_BOT_TOKEN="your-bot-token"
+python main.py
 ```
-python main.py -t=<YOUR BOT/USER ACCOUNT TOKEN> -c=<CHANNEL ID>
+
+On PowerShell:
+
+```powershell
+$env:DISCORD_BOT_TOKEN = "your-bot-token"
+python main.py
 ```
 
-An example
+You can also pass `--token`/`-t`, and optionally set an initial channel with
+`--channel`/`-c`:
+
+```sh
+python main.py --channel 123456789012345678
 ```
-python main.py -t=MjM4NDk0NzU2NTIxMzc3Nzky.CunGFQ.wUILz7z6HoJzVeq6pyHPmVgQgV4 -c=381870553235193857
+
+## Commands
+
+After connecting, type:
+
+| Command | Description |
+| --- | --- |
+| `/guilds` | List servers the bot has joined. |
+| `/channels [server-id]` | List text channels; use `/guilds` to find a server ID. |
+| `/channel <channel-id>` | Select a channel. |
+| `/history [1-100]` | Print recent messages from the selected channel (default: 20). |
+| `/shrug`, `/tableflip`, `/unflip`, `/lenny` | Send a text shortcut. |
+| `/help` | Show commands. |
+| `/logout` | Disconnect. |
+
+Any non-command line is sent as a message to the selected channel. The CLI
+history command uses Discord's [Get Channel Messages
+API](https://docs.discord.com/developers/resources/message#get-channel-messages)
+via `discord.py` and caps each request at 100 messages. History access requires
+`Read Message History`; message text may be unavailable if the bot lacks access
+to message content. Do not use this client to scrape or bulk-export server data.
+
+## Optional MCP server
+
+The MCP bridge is a separate, **read-only** stdio server using the [official
+Python SDK](https://py.sdk.modelcontextprotocol.io/). It exposes two tools:
+
+- `list_text_channels(guild_id)` — text and announcement channels available to
+  the bot.
+- `get_recent_messages(channel_id, limit=20)` — up to 100 recent messages.
+
+The bridge calls [Discord API v10](https://docs.discord.com/developers/intro)
+with a bot token and the bot's own permissions;
+it does not accept user credentials. Install the optional official MCP Python
+SDK (Python 3.11+):
+
+```sh
+python -m pip install -r requirements-mcp.txt
 ```
 
-You can run the CLI without providing a token or a channel ID. If you do not provide a token, you will be prompted to include your email/password. This method does not work all the time, especially if you have not logged into Discord for a long time. It is still highly recommended to provide a token. 2FA is supported in this case. Of course, you would have to include a token if you are going to run this on the bot account.
+Run `discord_mcp.py` as an MCP stdio process from your MCP host, with
+`DISCORD_BOT_TOKEN` in that process's environment. For example, a local MCP
+configuration can use the absolute path to this repository:
 
-If you do not provide a chnanel ID, the user will log in with no specified channel. You would have to then input a channel ID for the CLI to work.
+```json
+{
+  "mcpServers": {
+    "discord-cli": {
+      "command": "python",
+      "args": ["/absolute/path/to/discord-cli/discord_mcp.py"],
+      "env": {"DISCORD_BOT_TOKEN": "your-bot-token"}
+    }
+  }
+}
+```
 
-![image](https://i.imgur.com/QvY5GIM.png)    
-*An example of a functioning CLI*
+Treat the MCP host as having access to the bot's channel data. Discord's API
+rate limits are dynamic; the bridge observes the returned retry delay instead
+of hard-coding route quotas. The bridge intentionally omits send, edit, delete,
+member-list, and moderation tools. Write actions should be added only with
+explicit user confirmation in the MCP host and narrow Discord permissions.
 
-![image](https://i.imgur.com/z0kPupy.png)    
-*The CLI Error Handling*
+## API / MCP integration notes
 
-## What else do I want to be here?
-- [ ] Commands! 
-  - [x] /lenny
-  - [x] /shrug
-  - [x] /channel <CHANNEL ID>
-  - [ ] /embed
+The most useful initial API surfaces for this project are guild channel
+discovery ([Get Guild Channels](https://docs.discord.com/developers/resources/guild#get-guild-channels))
+and bounded channel history ([Get Channel Messages](https://docs.discord.com/developers/resources/message#get-channel-messages)).
+They make the CLI easier to navigate and the MCP tools useful without adding
+administrative side effects. The bot
+must be in the target server and have visibility/history permissions. For
+message text, the Message Content privileged intent must be enabled where
+required. Guild/channel/message IDs are passed as IDs rather than names to
+avoid ambiguous lookups.
 
-- [x] Remove f-strings - py3.5 compaitibility
+MCP is a good fit as an optional adapter: tools mirror small Discord API
+operations, while the CLI remains usable without the MCP SDK. A later extension
+could add thread summaries or message search over explicitly bounded history;
+Discord's API rate limits, message-content access, permission checks, and the
+MCP host's user-confirmation UX should remain part of that design.
 
-## How can you help?
-[CONTRIBUTING.md](CONTRIBUTING.md)
+## Development
+
+Run the offline tests with:
+
+```sh
+python -m unittest discover -s tests
+```
